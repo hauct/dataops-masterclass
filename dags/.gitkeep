@@ -1,0 +1,1 @@
+# Thư mục DAG dùng chung (mount vào Airflow). Mỗi buổi sẽ thêm DAG vào đây.

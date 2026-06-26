@@ -1,0 +1,12 @@
+# Cấu hình Prometheus tối thiểu cho buổi 9. Sẽ bổ sung scrape Airflow/StatsD exporter ở buổi đó.
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+  # buổi 9 sẽ thêm:
+  # - job_name: "airflow"
+  #   static_configs:
+  #     - targets: ["statsd-exporter:9102"]

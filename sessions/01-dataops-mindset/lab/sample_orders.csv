@@ -1,0 +1,11 @@
+order_id,order_date,customer_email,amount
+1001,2026-07-09,an.nguyen@example.com,250000
+1002,2026-07-09,binh.tran@example.com,1200000
+1003,2026-07-09,chi.le@example.com,99000
+1004,2026-07-09,an.nguyen@example.com,450000
+1005,2026-07-09,dung.pham@example.com,780000
+1006,2026-07-10,binh.tran@example.com,150000
+1007,2026-07-10,em.hoang@example.com,2000000
+1008,2026-07-10,chi.le@example.com,50000
+1009,2026-07-10,phuc.vo@example.com,325000
+1010,2026-07-10,an.nguyen@example.com,610000

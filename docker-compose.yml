@@ -1,0 +1,145 @@
+# DataOps Master Class — full local stack.
+# Dùng Docker Compose "profiles" để chỉ bật những service bạn cần cho từng buổi,
+# tránh ngốn RAM. Ví dụ:
+#   make up              -> core (Airflow + metadata DB)         | buổi 2,3
+#   make up-warehouse    -> + Postgres warehouse                 | buổi 4
+#   make up-lakehouse    -> + MinIO (object storage)             | buổi 5,6
+#   make up-monitoring   -> + Prometheus + Grafana               | buổi 9
+#   make up-all          -> tất cả
+#
+# Yêu cầu: Docker Desktop, cấp >= 6GB RAM (8GB khuyến nghị).
+
+x-airflow-common: &airflow-common
+  build:
+    context: ./infra/airflow
+  environment: &airflow-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-meta:5432/airflow
+    AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+    # Secrets được nạp từ .env (KHÔNG hardcode) — xem buổi 7.
+    AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:-}
+    AIRFLOW__API__SECRET_KEY: ${AIRFLOW_SECRET_KEY:-change-me}
+    # Kết nối tới warehouse & MinIO sẽ tạo qua Airflow Connections (buổi 4, 5).
+  volumes:
+    - ./sessions:/opt/airflow/project/sessions
+    - ./dags:/opt/airflow/dags
+    - ./data:/opt/airflow/data
+    - airflow-logs:/opt/airflow/logs
+  depends_on:
+    airflow-meta:
+      condition: service_healthy
+
+services:
+  # ---------- CORE: Airflow + metadata DB ----------
+  airflow-meta:
+    image: postgres:16
+    profiles: ["core", "all"]
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - airflow-meta-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 5s
+      retries: 10
+    restart: unless-stopped
+
+  airflow-init:
+    <<: *airflow-common
+    profiles: ["core", "all"]
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        airflow db migrate
+        airflow users create --username admin --password admin \
+          --firstname Admin --lastname User --role Admin --email admin@example.com || true
+    restart: "no"
+
+  airflow-apiserver:
+    <<: *airflow-common
+    profiles: ["core", "all"]
+    command: api-server
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/api/v2/version"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  airflow-scheduler:
+    <<: *airflow-common
+    profiles: ["core", "all"]
+    command: scheduler
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # ---------- WAREHOUSE stack (buổi 4) ----------
+  warehouse:
+    image: postgres:16
+    profiles: ["warehouse", "all"]
+    environment:
+      POSTGRES_USER: ${WAREHOUSE_USER:-dwh}
+      POSTGRES_PASSWORD: ${WAREHOUSE_PASSWORD:-dwh}
+      POSTGRES_DB: ${WAREHOUSE_DB:-analytics}
+    ports:
+      - "5433:5432"
+    volumes:
+      - warehouse-data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  # ---------- LAKEHOUSE stack: object storage (buổi 5,6) ----------
+  minio:
+    image: minio/minio:latest
+    profiles: ["lakehouse", "all"]
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # Web console
+    volumes:
+      - minio-data:/data
+    restart: unless-stopped
+
+  # ---------- MONITORING (buổi 9) ----------
+  prometheus:
+    image: prom/prometheus:latest
+    profiles: ["monitoring", "all"]
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    profiles: ["monitoring", "all"]
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+volumes:
+  airflow-meta-data:
+  airflow-logs:
+  warehouse-data:
+  minio-data:
+  grafana-data:
