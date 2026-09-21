@@ -1,0 +1,50 @@
+# CI cho pipeline (buổi 8): tự động lint + quét secret + test khi có thay đổi code.
+# Chạy y hệt local bằng: make ci
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  lint-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cài công cụ
+        run: pip install ruff==0.8.4 pytest==8.3.4
+
+      - name: Lint (ruff)
+        run: ruff check dags tests
+
+      - name: Quét secret hardcode
+        run: python sessions/07-security-pii/lab/scan_secrets.py
+
+      - name: Kiểm tra DAG biên dịch
+        run: python -m py_compile dags/*.py
+
+      - name: Unit & data tests
+        run: pytest -q
+
+  # (Tùy chọn — nâng cao) Validate DAG sâu hơn bằng Airflow thật.
+  # Bật khi cần: cài apache-airflow rồi dùng DagBag để bắt lỗi import.
+  # validate-dags:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: actions/setup-python@v5
+  #       with: {python-version: "3.12"}
+  #     - run: pip install "apache-airflow==3.0.6"
+  #     - run: |
+  #         python - <<'PY'
+  #         from airflow.models.dagbag import DagBag
+  #         db = DagBag(dag_folder="dags", include_examples=False)
+  #         assert not db.import_errors, db.import_errors
+  #         print("DAGs OK:", list(db.dags))
+  #         PY

@@ -23,7 +23,7 @@ Mục tiêu: phân biệt rõ DataOps vs DE vs DA · hiểu idempotency & reconc
 
 ---
 
-## Buổi 2 — Airflow 3: Kiến trúc & Triển khai 🚧
+## Buổi 2 — Airflow 3: Kiến trúc & Triển khai ✅
 **Ngày 13/07 · [`sessions/02-airflow-architecture/`](./sessions/02-airflow-architecture/)**
 
 Nội dung: Airflow là gì & vai trò trong DataOps · các component (Scheduler, Executor, Webserver/API server, Metadata DB, Worker, Triggerer) · các loại Executor (Local / Celery / Kubernetes) · các hướng triển khai (local Docker, Docker Compose, Kubernetes qua Helm) · giới thiệu HA & GitOps cho Airflow · **điểm mới ở Airflow 3** (DAG versioning, FastAPI UI, Task Execution API/Task SDK).
@@ -32,7 +32,7 @@ Thực hành: cài & chạy Airflow bằng Docker · làm quen UI, đọc logs, 
 
 ---
 
-## Buổi 3 — Viết DAG & các khái niệm nâng cao 🚧
+## Buổi 3 — Viết DAG & các khái niệm nâng cao ✅
 **Ngày 16/07 · [`sessions/03-writing-dags/`](./sessions/03-writing-dags/)**
 
 Nội dung: DAG, Task, Operator & TaskFlow API · **idempotency & atomicity** vì sao cực kỳ quan trọng · scheduling (cron, `schedule`, catchup, backfill an toàn) · retry, timeout, SLA/Deadline, alert · dependency giữa Task & giữa DAG · XCom, Pool, Connection, Variable, Sensor · giới thiệu Assets (data-aware scheduling).
@@ -41,7 +41,7 @@ Thực hành: viết & chạy DAG đúng chuẩn vận hành · backfill an toà
 
 ---
 
-## Buổi 4 — SQL in DataOps — Stack Data Warehouse 🚧
+## Buổi 4 — SQL in DataOps — Stack Data Warehouse ✅
 **Ngày 20/07 · [`sessions/04-sql-dwh/`](./sessions/04-sql-dwh/)**
 
 Nội dung: SQL pipeline reliable (MERGE/upsert, partition overwrite) · transaction & chạy lại không nhân đôi · **reconciliation** (đối soát số liệu nguồn vs đích) · quản lý dependency giữa các bước SQL.
@@ -50,7 +50,7 @@ Thực hành: viết SQL transform (MERGE/Upsert) · reconciliation nguồn↔đ
 
 ---
 
-## Buổi 5 — PySpark in Modern Lakehouse 🚧
+## Buổi 5 — PySpark in Modern Lakehouse ✅
 **Ngày 23/07 · [`sessions/05-pyspark-lakehouse/`](./sessions/05-pyspark-lakehouse/)**
 
 Nội dung: khi nào cần Lakehouse · triển khai stack Lakehouse · PySpark pipeline reliable (atomic & idempotent writes, partition overwrite an toàn) · **table format (Delta/Iceberg)**: ACID & time travel · case study migrate DWH → Data Lake minimal-downtime.
@@ -59,7 +59,7 @@ Thực hành: viết PySpark job idempotent & retry-safe · ghi qua Delta + th�
 
 ---
 
-## Buổi 6 — Tối ưu hiệu năng & chi phí 🚧
+## Buổi 6 — Tối ưu hiệu năng & chi phí ✅
 **Ngày 27/07 · [`sessions/06-performance-cost/`](./sessions/06-performance-cost/)**
 
 Nội dung: tư duy tối ưu (đủ nhanh, không over-engineer) · đọc query plan (DWH) & Spark UI (Lakehouse) · bottleneck phổ biến (data skew, small-files, shuffle) · partitioning, caching, broadcast join · tối ưu chi phí cloud (FinOps cơ bản).
@@ -68,7 +68,7 @@ Thực hành: phân tích job/truy vấn chậm · tối ưu & đo before/after 
 
 ---
 
-## Buổi 7 — Bảo mật & Dữ liệu nhạy cảm 🚧
+## Buổi 7 — Bảo mật & Dữ liệu nhạy cảm ✅
 **Ngày 30/07 · [`sessions/07-security-pii/`](./sessions/07-security-pii/)**
 
 Nội dung: secrets management (tuyệt đối không hardcode) · xử lý PII (masking, encryption, anonymization) · phân quyền least-privilege · governance cho dữ liệu regulated (tài chính/ngân hàng) · audit logging cơ bản.
@@ -77,7 +77,7 @@ Thực hành: masking PII · quản lý secrets bằng env/secret manager · áp
 
 ---
 
-## Buổi 8 — CI/CD cho Data Pipeline 🚧
+## Buổi 8 — CI/CD cho Data Pipeline ✅
 **Ngày 03/08 · [`sessions/08-cicd/`](./sessions/08-cicd/)**
 
 Nội dung: Git flow & vì sao cần CI/CD cho pipeline · test cho pipeline (unit test Python/SQL/Spark & data test) · CI (lint + test tự động) · CD (deploy lên môi trường) · GitOps & rollback.

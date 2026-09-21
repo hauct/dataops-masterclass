@@ -1,0 +1,17 @@
+# Cấu hình công cụ dev cho khóa học (ruff lint/format + pytest).
+# Dùng từ buổi 8 (CI/CD), nhưng để sẵn từ đầu cho gọn.
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+# E/F: lỗi cơ bản; I: sắp xếp import; UP: cú pháp Python hiện đại; B: bug phổ biến
+select = ["E", "F", "I", "UP", "B"]
+# E501 (line too long): bỏ qua vì nhiều câu SQL/URL không tự xuống dòng được;
+# layout để `ruff format` lo. Đây là lựa chọn phổ biến trong thực tế.
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["sessions", "tests"]
+python_files = ["test_*.py", "*_test.py"]

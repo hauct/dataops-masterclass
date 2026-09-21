@@ -15,12 +15,23 @@ x-airflow-common: &airflow-common
   environment: &airflow-env
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
     AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    # Bật FAB auth manager để đăng nhập bằng username/password (mặc định Airflow 3 là SimpleAuthManager).
+    AIRFLOW__CORE__AUTH_MANAGER: airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
+    # Airflow 3: task (chạy trong container scheduler) phải gọi Task Execution API trên container
+    # apiserver. Mặc định trỏ localhost -> fail. Trỏ đúng tên service để các container nói chuyện được.
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-apiserver:8080/execution/
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-meta:5432/airflow
     AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
     # Secrets được nạp từ .env (KHÔNG hardcode) — xem buổi 7.
     AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:-}
     AIRFLOW__API__SECRET_KEY: ${AIRFLOW_SECRET_KEY:-change-me}
-    # Kết nối tới warehouse & MinIO sẽ tạo qua Airflow Connections (buổi 4, 5).
+    # JWT secret cho Task Execution API. PHẢI giống nhau ở mọi container, nếu không scheduler ký token
+    # bằng khóa khác apiserver verify -> lỗi "Invalid auth token: Signature verification failed" (403).
+    AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_JWT_SECRET:-dataops-masterclass-shared-jwt-secret-change-me}
+    # Airflow Connection tới warehouse (buổi 4) — khai báo qua env AIRFLOW_CONN_<ID> để khỏi tạo tay trên UI.
+    # conn_id = "warehouse". Chỉ kết nối được khi đã bật profile warehouse (make up-warehouse).
+    AIRFLOW_CONN_WAREHOUSE: postgresql://${WAREHOUSE_USER:-dwh}:${WAREHOUSE_PASSWORD:-dwh}@warehouse:5432/${WAREHOUSE_DB:-analytics}
+    # (MinIO connection sẽ thêm ở buổi 5.)
   volumes:
     - ./sessions:/opt/airflow/project/sessions
     - ./dags:/opt/airflow/dags
@@ -55,6 +66,9 @@ services:
       - -c
       - |
         airflow db migrate
+        # FAB provider quản lý bảng user riêng ở Airflow 3 -> phải migrate riêng,
+        # nếu không sẽ thiếu bảng ab_user và login bị lỗi "Something bad has happened".
+        airflow fab-db migrate
         airflow users create --username admin --password admin \
           --firstname Admin --lastname User --role Admin --email admin@example.com || true
     restart: "no"
@@ -79,6 +93,17 @@ services:
     <<: *airflow-common
     profiles: ["core", "all"]
     command: scheduler
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # Airflow 3: DAG Processor là tiến trình RIÊNG (khác Airflow 2). Thiếu nó thì
+  # file trong dags/ không được parse -> không DAG nào hiện trên UI.
+  airflow-dag-processor:
+    <<: *airflow-common
+    profiles: ["core", "all"]
+    command: dag-processor
     depends_on:
       airflow-init:
         condition: service_completed_successfully
@@ -113,6 +138,80 @@ services:
       - minio-data:/data
     restart: unless-stopped
 
+  # Tạo sẵn bucket "lakehouse" trên MinIO (cho phần S3A tùy chọn của buổi 5).
+  minio-init:
+    image: minio/mc:latest
+    profiles: ["lakehouse", "all"]
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin}; do sleep 2; done;
+      mc mb -p local/lakehouse || true;
+      echo 'Bucket lakehouse sẵn sàng'; "
+    restart: "no"
+
+  # ---------- SPARK engine (buổi 5,6) ----------
+  # Spark chạy như một ENGINE riêng (Airflow là nhạc trưởng, Spark là nhạc công).
+  # Image apache/spark đã có sẵn Java 17 + Spark 3.5 -> không cần cài Java thủ công.
+  spark:
+    image: apache/spark:3.5.3
+    profiles: ["lakehouse", "all"]
+    user: root                       # để ghi được vào thư mục data/ mount từ host
+    environment:
+      HOME: /root                    # ~/.ivy2 (cache jar Delta tải lần đầu) nằm ở đây
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - ./sessions:/opt/project/sessions          # code job
+      - ./data:/opt/data                          # nơi ghi bảng Delta (thấy được trong repo)
+      - spark-ivy:/root/.ivy2                      # cache jar Delta giữa các lần chạy
+    command: ["tail", "-f", "/dev/null"]           # giữ container sống để `docker compose exec`
+    restart: unless-stopped
+
+  # ---------- SPARK STANDALONE CLUSTER (tùy chọn) ----------
+  # Profile riêng "cluster": 1 master + 2 worker = cụm Spark thật để thấy job chạy phân tán.
+  # Bật bằng: make up-cluster   |   Submit bằng: make spark-job-cluster
+  # (Container `spark` ở trên đóng vai client/driver submit tới master này.)
+  spark-master:
+    image: apache/spark:3.5.3
+    profiles: ["cluster", "all"]
+    user: root
+    command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.master.Master"]
+    environment:
+      HOME: /root
+    ports:
+      - "7077:7077"     # cổng cluster (spark://...)
+      - "8085:8080"     # Master Web UI (8080 đã bị Airflow chiếm -> map ra 8085)
+    volumes:
+      - ./sessions:/opt/project/sessions
+      - ./data:/opt/data
+      - spark-ivy:/root/.ivy2
+    restart: unless-stopped
+
+  spark-worker:
+    image: apache/spark:3.5.3
+    profiles: ["cluster", "all"]
+    user: root
+    command:
+      - /opt/spark/bin/spark-class
+      - org.apache.spark.deploy.worker.Worker
+      - spark://spark-master:7077
+    environment:
+      HOME: /root
+      SPARK_WORKER_CORES: "2"      # mỗi worker 2 core
+      SPARK_WORKER_MEMORY: "2G"    # mỗi worker 2GB
+    depends_on:
+      - spark-master
+    deploy:
+      replicas: 2                  # dựng 2 worker -> thấy job chia cho nhiều máy
+    volumes:
+      - ./sessions:/opt/project/sessions   # executor cần đọc code/dữ liệu cùng đường dẫn
+      - ./data:/opt/data                   # cùng bind mount -> mọi worker ghi/đọc chung bảng Delta
+      - spark-ivy:/root/.ivy2
+    restart: unless-stopped
+
   # ---------- MONITORING (buổi 9) ----------
   prometheus:
     image: prom/prometheus:latest
@@ -143,3 +242,4 @@ volumes:
   warehouse-data:
   minio-data:
   grafana-data:
+  spark-ivy:

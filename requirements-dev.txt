@@ -1,0 +1,21 @@
+# Môi trường Python LOCAL để phát triển & chạy lab trên máy bạn (KHÁC với requirements
+# trong Docker image của Airflow tại infra/airflow/requirements.txt).
+#
+# Cài: xem hướng dẫn ở docs/setup.md mục "Môi trường Python local".
+# Pin version để reproducible (cùng tinh thần DataOps).
+
+# --- Chất lượng code (buổi 8 - CI/CD) ---
+ruff            # linter + formatter
+pytest        # unit test
+
+# --- Làm việc với dữ liệu (lab các buổi) ---
+# Dùng khoảng version (>=) để pip luôn lấy được bản wheel dựng sẵn hợp với
+# phiên bản Python của bạn, tránh phải build từ source (cần gcc).
+pandas>=2.1.0
+psycopg2-binary    # kết nối Postgres warehouse (buổi 4)
+
+# --- Data quality (buổi 9) ---
+great-expectations
+
+# Ghi chú: PySpark (buổi 5) chạy trong container, không cần cài ở venv local.
+# Nếu muốn chạy Spark local thì cài thêm: pyspark==3.5.4 delta-spark==3.2.1 (cần Java 17).
